@@ -6,6 +6,7 @@ document.addEventListener(DOMContentLoaded, function() {
     const taskList = document.getElementById(task-list);
     const totalTasksElement = document.getElementById(total-tasks);
     const completedTasksElement = document.getElementById(completed-tasks);
+    const remainingTasksElement = document.getElementById(remaining-tasks);
     const filterButtons = document.querySelectorAll(.filter-btn);
     
     // Initialize tasks array from localStorage or empty array
@@ -16,14 +17,28 @@ document.addEventListener(DOMContentLoaded, function() {
     function updateStats() {
         const totalTasks = tasks.length;
         const completedTasks = tasks.filter(task => task.completed).length;
+        const remainingTasks = totalTasks - completedTasks;
         
         totalTasksElement.textContent = `Total: ${totalTasks}`;
         completedTasksElement.textContent = `Completed: ${completedTasks}`;
+        remainingTasksElement.textContent = `Remaining: ${remainingTasks}`;
     }
     
     // Save tasks to localStorage
     function saveTasks() {
         localStorage.setItem(tasks, JSON.stringify(tasks));
+        console.log(Tasks saved to localStorage:, tasks);
+    }
+    
+    // Load tasks from localStorage
+    function loadTasks() {
+        const storedTasks = localStorage.getItem(tasks);
+        if (storedTasks) {
+            tasks = JSON.parse(storedTasks);
+            console.log(Tasks loaded from localStorage:, tasks);
+        }
+        updateStats();
+        renderTasks();
     }
     
     // Render tasks based on current filter
@@ -41,7 +56,7 @@ document.addEventListener(DOMContentLoaded, function() {
         
         // Show empty state if no tasks
         if (filteredTasks.length === 0) {
-            const emptyState = document.createElement(li);
+            const emptyState = document.createElement(div);
             emptyState.className = empty-state;
             emptyState.textContent = currentFilter === all 
                 ? No tasks yet. Add a task to get started > script.js 
@@ -52,40 +67,30 @@ document.addEventListener(DOMContentLoaded, function() {
         
         // Create and append task elements
         filteredTasks.forEach((task, index) => {
-            const li = document.createElement(li);
-            li.className = task.completed ? completed : ;
+            const taskItem = document.createElement(div);
+            taskItem.className = `task-item ${task.completed ? completed : }`;
+            taskItem.setAttribute(data-task-id, task.id || index);
+            
+            const taskCheckbox = document.createElement(input);
+            taskCheckbox.type = checkbox;
+            taskCheckbox.className = task-checkbox;
+            taskCheckbox.checked = task.completed;
+            taskCheckbox.addEventListener(change, () => toggleTaskCompletion(task.id || index));
             
             const taskText = document.createElement(span);
             taskText.className = task-text;
             taskText.textContent = task.text;
-            taskText.addEventListener(click, () => toggleTaskCompletion(index));
-            
-            const taskActions = document.createElement(div);
-            taskActions.className = task-actions;
-            
-            const completeBtn = document.createElement(button);
-            completeBtn.className = complete-btn;
-            completeBtn.textContent = task.completed ? Undo : Complete;
-            completeBtn.addEventListener(click, (e) => {
-                e.stopPropagation();
-                toggleTaskCompletion(index);
-            });
             
             const removeBtn = document.createElement(button);
             removeBtn.className = remove-btn;
             removeBtn.textContent = Remove;
-            removeBtn.addEventListener(click, (e) => {
-                e.stopPropagation();
-                removeTask(index);
-            });
+            removeBtn.addEventListener(click, () => removeTask(task.id || index));
             
-            taskActions.appendChild(completeBtn);
-            taskActions.appendChild(removeBtn);
+            taskItem.appendChild(taskCheckbox);
+            taskItem.appendChild(taskText);
+            taskItem.appendChild(removeBtn);
             
-            li.appendChild(taskText);
-            li.appendChild(taskActions);
-            
-            taskList.appendChild(li);
+            taskList.appendChild(taskItem);
         });
     }
     
@@ -98,40 +103,60 @@ document.addEventListener(DOMContentLoaded, function() {
             return;
         }
         
-        // Add task to array
-        tasks.push({
+        // Add task to array with unique ID
+        const newTask = {
+            id: Date.now(), // Use timestamp as unique ID
             text: taskText,
-            completed: false
-        });
+            completed: false,
+            createdAt: new Date().toISOString()
+        };
+        
+        tasks.push(newTask);
         
         // Clear input
         taskInput.value = ;
         
-        // Save and re-render
+        // Save to localStorage and re-render
         saveTasks();
         updateStats();
         renderTasks();
     }
     
     // Remove a task
-    function removeTask(index) {
-        // Find the actual index in the original tasks array
-        const taskId = tasks.findIndex(task => task.text === tasks[index].text);
-        tasks.splice(taskId, 1);
+    function removeTask(taskId) {
+        // Find the task index by ID
+        const taskIndex = tasks.findIndex(task => task.id === taskId || task.id === undefined);
         
-        // Save and re-render
-        saveTasks();
-        updateStats();
-        renderTasks();
+        if (taskIndex !== -1) {
+            tasks.splice(taskIndex, 1);
+            
+            // Save to localStorage and re-render
+            saveTasks();
+            updateStats();
+            renderTasks();
+        }
     }
     
     // Toggle task completion
-    function toggleTaskCompletion(index) {
-        // Find the actual index in the original tasks array
-        const taskId = tasks.findIndex(task => task.text === tasks[index].text);
-        tasks[taskId].completed = !tasks[taskId].completed;
+    function toggleTaskCompletion(taskId) {
+        // Find the task by ID
+        const task = tasks.find(task => task.id === taskId || task.id === undefined);
         
-        // Save and re-render
+        if (task) {
+            task.completed = !task.completed;
+            
+            // Save to localStorage and re-render
+            saveTasks();
+            updateStats();
+            renderTasks();
+        }
+    }
+    
+    // Clear all completed tasks
+    function clearCompletedTasks() {
+        tasks = tasks.filter(task => !task.completed);
+        
+        // Save to localStorage and re-render
         saveTasks();
         updateStats();
         renderTasks();
@@ -150,6 +175,14 @@ document.addEventListener(DOMContentLoaded, function() {
         });
     });
     
+    // Add keyboard shortcut for clearing completed tasks (Ctrl+Shift+C)
+    document.addEventListener(keydown, function(event) {
+        if (event.ctrlKey && event.shiftKey && event.key === C) {
+            event.preventDefault();
+            clearCompletedTasks();
+        }
+    });
+    
     // Event listeners
     addButton.addEventListener(click, addTask);
     
@@ -159,7 +192,19 @@ document.addEventListener(DOMContentLoaded, function() {
         }
     });
     
-    // Initial render
-    updateStats();
-    renderTasks();
+    // Initialize the application
+    loadTasks();
+    
+    // Export functions for testing (if needed)
+    if (typeof module !== undefined && module.exports) {
+        module.exports = {
+            addTask,
+            removeTask,
+            toggleTaskCompletion,
+            clearCompletedTasks,
+            updateStats,
+            saveTasks,
+            loadTasks
+        };
+    }
 });
